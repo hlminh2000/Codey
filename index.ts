@@ -96,7 +96,7 @@ const streamAndAccumulateChunks = async (
 
 const chatHistory: BaseMessageLike[] = [
 	new SystemMessage(
-		`You are a skilled coding assistant capable of:
+`You are a skilled coding assistant capable of:
 1. Analyzing entire codebases by studying file structures and code patterns
 2. Performing precise code modifications using file system operations
 3. Maintaining code quality through best practices and documentation
@@ -128,6 +128,13 @@ You are currently working on the code base at ${workingDirectory}.`,
 
 const toolsMap = new Map(tools.map((t) => [t.name, t]));
 
+// Define tools that require user approval before execution
+const SENSITIVE_TOOLS = new Set([
+	"writeFile",
+	"bash",
+	// Add more sensitive tools here as needed
+]);
+
 while (true) {
 	const { userPrompt } = await inquirer.prompt([
 		{
@@ -143,20 +150,36 @@ while (true) {
 	while ((chatHistory.at(-1) as AIMessage).tool_calls?.length) {
 		const lastMessage = chatHistory.at(-1) as AIMessage;
 
-		// Display tool calls and ask for approval
+		// Check if any of the tool calls are sensitive
+		const sensitiveToolCalls = lastMessage.tool_calls?.filter((toolCall) =>
+			SENSITIVE_TOOLS.has(toolCall.name)
+		) ?? [];
+		
+		const hasSensitiveTools = sensitiveToolCalls.length > 0;
+
+		// Display tool calls
 		console.log("\n📋 Tool calls requested:");
 		for (const toolCall of lastMessage.tool_calls || []) {
-			console.log(`  - ${toolCall.name}(${JSON.stringify(toolCall.args)})`);
+			const isSensitive = SENSITIVE_TOOLS.has(toolCall.name);
+			const prefix = isSensitive ? "🔒" : "  ";
+			console.log(`${prefix} - ${toolCall.name}(${JSON.stringify(toolCall.args)})`);
 		}
 
-		const { approved } = await inquirer.prompt([
-			{
-				type: "confirm",
-				name: "approved",
-				message: "Do you approve these tool calls?",
-				default: true,
-			},
-		]);
+		// Only ask for approval if there are sensitive tools
+		const approved = await (async () => {
+			if (hasSensitiveTools) {
+				return (await inquirer.prompt([
+					{
+						type: "confirm",
+						name: "approved",
+						message: `Do you approve these ${sensitiveToolCalls.length} sensitive tool call(s)?`,
+						default: true,
+					},
+				])).approved;
+			}
+			console.log("✅ Auto-approved (no sensitive tools). Executing...\n");
+			return true;
+		})();
 
 		if (!approved) {
 			console.log("❌ Tool calls rejected by user.\n");
@@ -172,7 +195,9 @@ while (true) {
 				) ?? [];
 			chatHistory.push(...rejectionMessages);
 		} else {
-			console.log("✅ Tool calls approved. Executing...\n");
+			if (hasSensitiveTools) {
+				console.log("✅ Tool calls approved. Executing...\n");
+			}
 			const toolcallMessages = (
 				await Promise.allSettled(
 					lastMessage.tool_calls?.map(async (toolCall) => {
