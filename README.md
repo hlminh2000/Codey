@@ -31,7 +31,6 @@ The agent will only be able to access files within the specified working directo
 
 ## Key Features
 - Secure directory-based file access control
-- Built with React for interactive UI
 - TypeScript support with strict type checking
 - Bun.js for fast execution
 
