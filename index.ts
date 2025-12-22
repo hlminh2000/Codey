@@ -21,9 +21,6 @@ const workingDirectory = args[0] ? resolve(args[0]) : process.cwd();
 console.log(`🔒 Working directory: ${workingDirectory}`);
 console.log("Agent can only access files within this directory.\n");
 
-// Create tools with the specified working directory
-const tools = createTools(workingDirectory);
-
 // const model = new ChatGoogleGenerativeAI({
 // 	model: "gemini-flash-lite-latest",
 // 	maxOutputTokens: 2048,
@@ -38,6 +35,9 @@ const model = new ChatOllama({
 	model: "qwen3:8b",
 	temperature: 0,
 });
+
+// Create tools with the specified working directory and model
+const tools = createTools(workingDirectory, model);
 
 const streamAndAccumulateChunks = async (
 	stream: Awaited<ReturnType<typeof model.stream>>,
@@ -100,6 +100,7 @@ const chatHistory: BaseMessageLike[] = [
 1. Analyzing entire codebases by studying file structures and code patterns
 2. Performing precise code modifications using file system operations
 3. Maintaining code quality through best practices and documentation
+4. Break a problem down into step-by-step execution plan
 
 Your capabilities include:
 - Understanding code architecture and component relationships
@@ -165,7 +166,7 @@ while (true) {
 					(toolCall) =>
 						new ToolMessage({
 							content:
-								"Tool call rejected by user. The user did not approve this action. Please ask the user what they would like you to do instead.",
+								"Tool call rejected by user. Please ask the user what they would like you to do instead.",
 							tool_call_id: toolCall.id || "",
 						}),
 				) ?? [];
@@ -179,7 +180,11 @@ while (true) {
 							`#toolcall: ${toolCall.name} ${JSON.stringify(toolCall.args)}`,
 						);
 						const tool = toolsMap.get(toolCall.name);
-						return tool ? await (tool.invoke as any)(toolCall) : undefined;
+						const result = tool
+							? await (tool.invoke as any)(toolCall)
+							: undefined;
+						console.log(`#result: ${JSON.stringify(result.content)}`)
+						return result;
 					}) ?? [],
 				)
 			).map((r) => (r.status === "fulfilled" ? r.value : r.reason));
