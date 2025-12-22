@@ -2,82 +2,98 @@ import inquirer from "inquirer";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { readdir, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { resolve, relative } from "node:path";
 
-export const tools = [
-// 	tool(
-// 		async ({ operation, a, b }) => {
-// 			switch (operation) {
-// 				case "add":
-// 					return `${a + b}`;
-// 				case "subtract":
-// 					return `${a - b}`;
-// 				case "multiply":
-// 					return `${a * b}`;
-// 				case "divide":
-// 					return `${a / b}`;
-// 				default:
-// 					return "Unknown operation";
-// 			}
-// 		},
-// 		{
-// 			name: "calculator",
-// 			description:
-// 				"Performs basic arithmetic operations (add, subtract, multiply, divide) on two numbers",
-// 			schema: z.object({
-// 				operation: z
-// 					.enum(["add", "subtract", "multiply", "divide"])
-// 					.describe("The operation to perform"),
-// 				a: z.number().describe("First number"),
-// 				b: z.number().describe("Second number"),
-// 			}),
-// 		},
-// 	),
-// 	tool(
-// 		async ({ type, message }) => {
-// 			// Call inquirer directly for a one-question prompt
-// 			const response = await inquirer.prompt([
-// 				{
-// 					type,
-// 					name: "userInput",
-// 					message,
-// 				},
-// 			]);
-// 			if (type === "confirm") return response.userInput ? "yes" : "no";
-// 			return response.userInput;
-// 		},
-// 		{
-// 			name: "promptTool",
-// 			description: `Use this tool when you want to ask user a question / get their inputs.
-// here are the types:
-// - input: used for free text questions
-// - confirm: yes/no questions, returns a boolean
-// `,
-// 			schema: z.object({
-// 				type: z
-// 					.enum([
-// 						"input",
-// 						"confirm",
-// 						"editor",
-// 						"password",
-// 						"number",
-// 						"rawlist",
-// 						"expand",
-// 						"checkbox",
-// 						"search",
-// 						"select",
-// 						"list",
-// 					])
-// 					.describe("The type of prompt to use."),
-// 				message: z
-// 					.string()
-// 					.describe("The question / message you want to present to the user."),
-// 			}),
-// 		},
-// 	),
+/**
+ * Checks if a path is within the allowed working directory
+ */
+const isPathAllowed = (targetPath: string, workingDir: string): boolean => {
+	const resolvedTarget = resolve(targetPath);
+	const resolvedWorkingDir = resolve(workingDir);
+	const relativePath = relative(resolvedWorkingDir, resolvedTarget);
+	
+	// If relative path starts with '..', it's outside the working directory
+	// Empty string means the paths are the same (allowed)
+	return relativePath === '' || !relativePath.startsWith('..');
+};
+
+export const createTools = (workingDirectory: string) => [
+	tool(
+		async ({ operation, a, b }) => {
+			switch (operation) {
+				case "add":
+					return `${a + b}`;
+				case "subtract":
+					return `${a - b}`;
+				case "multiply":
+					return `${a * b}`;
+				case "divide":
+					return `${a / b}`;
+				default:
+					return "Unknown operation";
+			}
+		},
+		{
+			name: "calculator",
+			description:
+				"Performs basic arithmetic operations (add, subtract, multiply, divide) on two numbers",
+			schema: z.object({
+				operation: z
+					.enum(["add", "subtract", "multiply", "divide"])
+					.describe("The operation to perform"),
+				a: z.number().describe("First number"),
+				b: z.number().describe("Second number"),
+			}),
+		},
+	),
+	tool(
+		async ({ type, message }) => {
+			// Call inquirer directly for a one-question prompt
+			const response = await inquirer.prompt([
+				{
+					type,
+					name: "userInput",
+					message,
+				},
+			]);
+			if (type === "confirm") return response.userInput ? "yes" : "no";
+			return response.userInput;
+		},
+		{
+			name: "promptTool",
+			description: `Use this tool when you want to ask user a question / get their inputs.
+here are the types:
+- input: used for free text questions
+- confirm: yes/no questions, returns a boolean
+`,
+			schema: z.object({
+				type: z
+					.enum([
+						"input",
+						"confirm",
+						"editor",
+						"password",
+						"number",
+						"rawlist",
+						"expand",
+						"checkbox",
+						"search",
+						"select",
+						"list",
+					])
+					.describe("The type of prompt to use."),
+				message: z
+					.string()
+					.describe("The question / message you want to present to the user."),
+			}),
+		},
+	),
 	tool(
 		async ({ path }) => {
 			try {
+				if (!isPathAllowed(path, workingDirectory)) {
+					return `Permission denied: Cannot access '${path}'. You can only access files within the working directory: ${workingDirectory}`;
+				}
 				const fullPath = resolve(path);
 				const entries = await readdir(fullPath, { withFileTypes: true });
 				const files = entries
@@ -102,6 +118,9 @@ export const tools = [
 	tool(
 		async ({ path }) => {
 			try {
+				if (!isPathAllowed(path, workingDirectory)) {
+					return `Permission denied: Cannot access '${path}'. You can only access files within the working directory: ${workingDirectory}`;
+				}
 				const fullPath = resolve(path);
 				const content = await readFile(fullPath, "utf-8");
 				return content;
@@ -120,6 +139,9 @@ export const tools = [
 	tool(
 		async ({ path, content }) => {
 			try {
+				if (!isPathAllowed(path, workingDirectory)) {
+					return `Permission denied: Cannot access '${path}'. You can only access files within the working directory: ${workingDirectory}`;
+				}
 				const fullPath = resolve(path);
 				await writeFile(fullPath, content, "utf-8");
 				return `Successfully wrote ${content.length} characters to ${path}`;
@@ -136,5 +158,4 @@ export const tools = [
 			}),
 		},
 	),
-	// tool(async () => {}, {name: "think"})
 ];

@@ -10,7 +10,18 @@ import {
 	type BaseMessageLike,
 } from "@langchain/core/messages";
 import inquirer from "inquirer";
-import { tools } from "./tools";
+import { createTools } from "./tools";
+import { resolve } from "node:path";
+
+// Parse command-line arguments
+const args = process.argv.slice(2);
+const workingDirectory = args[0] ? resolve(args[0]) : process.cwd();
+
+console.log(`🔒 Working directory: ${workingDirectory}`);
+console.log("Agent can only access files within this directory.\n");
+
+// Create tools with the specified working directory
+const tools = createTools(workingDirectory);
 
 // const model = new ChatGoogleGenerativeAI({
 // 	model: "gemini-flash-lite-latest",
@@ -25,7 +36,6 @@ import { tools } from "./tools";
 const model = new ChatOllama({
 	model: "qwen3:8b",
 	temperature: 0,
-	// think: false,
 });
 
 const streamAndAccumulateChunks = async (stream: Awaited<ReturnType<typeof model.stream>>) => {
@@ -78,21 +88,35 @@ const streamAndAccumulateChunks = async (stream: Awaited<ReturnType<typeof model
 
 const chatHistory: BaseMessageLike[] = [
 	new SystemMessage(
-		`Act as a skilled coding assistant capable of:
-1. Writing, debugging, and optimizing code in various programming languages
-2. Explaining technical concepts and algorithms
-3. Offering best practices and code structure suggestions
-4. Identifying potential bugs and edge cases
+		`You are a skilled coding assistant capable of:
+1. Analyzing entire codebases by studying file structures and code patterns
+2. Performing precise code modifications using file system operations
+3. Maintaining code quality through best practices and documentation
 
-You support popular languages like Python, JavaScript, Java, C++, and others. When unsure about a request, ask for clarification. Always verify code accuracy before providing it. Remember to explain your reasoning and encourage the user to test code themselves. Prioritize clear, maintainable solutions over overly complex ones.`,
+Your capabilities include:
+- Understanding code architecture and component relationships
+- Identifying technical debt and opportunities for improvement
+- Executing refactoring, bug fixes, and feature implementations
+- Collaborating with developers through structured prompts
+
+When operating on a codebase, you will:
+1. Use the 'listFiles' tool to understand directory structures
+2. Employ 'readFile' to study existing code implementations
+3. Modify files using 'writeFile' for code changes
+4. Use 'promptTool' for clarification when needed
+5. Leverage the calculator tool for arithmetic operations in code
+
+Always:
+- Verify file paths before performing operations
+- Maintain code readability and documentation
+- Handle edge cases in file operations
+- Ask for confirmation when making significant changes
+- Provide clear explanations of your modifications
+
+You are currently working on the code base at ${workingDirectory}.`,
 	),
-	// 	new SystemMessage(
-	// 		`
-	// You are a helpful assistant.
-	// Think through problems step by step to answer the user's questions.
-	// Always respond in plain text.`,
-	// 	),
 ];
+
 const toolsMap = new Map(tools.map((t) => [t.name, t]));
 
 while (true) {
