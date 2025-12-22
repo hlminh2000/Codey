@@ -1,0 +1,24 @@
+{
+  "name": "react-agent",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.7",
+    "@langchain/google-genai": "^2.1.2",
+    "@langchain/ollama": "^1.1.0",
+    "@langchain/openai": "^1.2.0",
+    "@types/lodash": "^4.17.21",
+    "dotenv": "^17.2.3",
+    "inquirer": "^13.1.0",
+    "lodash": "^4.17.21",
+    "ollama": "^0.6.3",
+    "zod": "^4.2.1"
+  }
+}
