@@ -145,6 +145,6 @@ while (true) {
 		chatHistory.push(...toolcallMessages);
 		const response = await model.stream(chatHistory, { tools });
 		const accumulated = await streamAndAccumulateChunks(response);
-		chatHistory.push(accumulated as any);
+		chatHistory.push(accumulated);
 	}
 }
