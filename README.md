@@ -1,8 +1,8 @@
-# react-agent
+# Codey
 
 ## Project Overview
 
-react-agent is a React-based application that serves as an agent capable of interacting with files within a specified working directory. It enforces strict access control, allowing file operations only within the designated directory to ensure security.
+Codey is a application that serves as an agent capable of interacting with files within a specified working directory. It enforces strict access control, allowing file operations only within the designated directory to ensure security.
 
 ## Getting Started
 
