@@ -7,6 +7,7 @@ import {
 	type AIMessage,
 	SystemMessage,
 	HumanMessage,
+	ToolMessage,
 	type BaseMessageLike,
 } from "@langchain/core/messages";
 import inquirer from "inquirer";
@@ -38,42 +39,49 @@ const model = new ChatOllama({
 	temperature: 0,
 });
 
-const streamAndAccumulateChunks = async (stream: Awaited<ReturnType<typeof model.stream>>) => {
+const streamAndAccumulateChunks = async (
+	stream: Awaited<ReturnType<typeof model.stream>>,
+) => {
 	const chunks = [];
 	enum StreamType {
 		thought = "thought",
 		response = "response",
-		none = "none"
+		none = "none",
 	}
 	const streamState = {
 		currentStreamType: StreamType.thought,
-		lastStreamType: StreamType.none
+		lastStreamType: StreamType.none,
 	};
 	const setCurrentStreamType = (type: StreamType) => {
 		streamState.lastStreamType = streamState.currentStreamType;
 		streamState.currentStreamType = type;
-	}
+	};
 	for await (const chunk of stream) {
-		if(streamState.currentStreamType !== streamState.lastStreamType) {
-			if (streamState.currentStreamType === StreamType.thought) console.log("\n### THOUGHT ###\n");
+		if (streamState.currentStreamType !== streamState.lastStreamType) {
+			if (streamState.currentStreamType === StreamType.thought)
+				console.log("\n### THOUGHT ###\n");
 		}
-		if (chunk.content?.length) setCurrentStreamType(StreamType.response)
-		if (chunk.additional_kwargs.reasoning_content) setCurrentStreamType(StreamType.thought)
+		if (chunk.content?.length) setCurrentStreamType(StreamType.response);
+		if (chunk.additional_kwargs.reasoning_content)
+			setCurrentStreamType(StreamType.thought);
 		if (chunk.additional_kwargs.reasoning_content) {
 			process.stdout.write(String(chunk.additional_kwargs.reasoning_content));
 		}
 
 		if (streamState.currentStreamType !== streamState.lastStreamType) {
-			if (streamState.currentStreamType === StreamType.response) console.log("\n###############\n");
+			if (streamState.currentStreamType === StreamType.response)
+				console.log("\n###############\n");
 		}
 
 		process.stdout.write(chunk.content.toString());
-		chunks.push(chunk)
+		chunks.push(chunk);
 	}
-	console.log('\n\n');
+	console.log("\n\n");
 	const accumulated = chunks.reduce((acc, chunk) => {
 		if (chunk.additional_kwargs.reasoning_content) {
-			acc.additional_kwargs.reasoning_content = acc.additional_kwargs.reasoning_content as string + chunk.additional_kwargs.reasoning_content;
+			acc.additional_kwargs.reasoning_content =
+				(acc.additional_kwargs.reasoning_content as string) +
+				chunk.additional_kwargs.reasoning_content;
 		}
 		if (chunk.content) {
 			acc.content = acc.content.toString() + chunk.content.toString();
@@ -83,8 +91,8 @@ const streamAndAccumulateChunks = async (stream: Awaited<ReturnType<typeof model
 		}
 		return acc;
 	});
-	return accumulated
-}
+	return accumulated;
+};
 
 const chatHistory: BaseMessageLike[] = [
 	new SystemMessage(
@@ -133,16 +141,51 @@ while (true) {
 	chatHistory.push(accumulated);
 	while ((chatHistory.at(-1) as AIMessage).tool_calls?.length) {
 		const lastMessage = chatHistory.at(-1) as AIMessage;
-		const toolcallMessages = (
-			await Promise.allSettled(
-				lastMessage.tool_calls?.map(async (toolCall) => {
-					console.log(`#toolcall: ${toolCall.name} ${JSON.stringify(toolCall.args)}`);
-					const tool = toolsMap.get(toolCall.name);
-					return tool ? await (tool.invoke as any)(toolCall) : undefined;
-				}) ?? [],
-			)
-		).map((r) => (r.status === "fulfilled" ? r.value : r.reason));
-		chatHistory.push(...toolcallMessages);
+
+		// Display tool calls and ask for approval
+		console.log("\n📋 Tool calls requested:");
+		for (const toolCall of lastMessage.tool_calls || []) {
+			console.log(`  - ${toolCall.name}(${JSON.stringify(toolCall.args)})`);
+		}
+
+		const { approved } = await inquirer.prompt([
+			{
+				type: "confirm",
+				name: "approved",
+				message: "Do you approve these tool calls?",
+				default: true,
+			},
+		]);
+
+		if (!approved) {
+			console.log("❌ Tool calls rejected by user.\n");
+			// Create tool call result messages for each rejected tool call
+			const rejectionMessages =
+				lastMessage.tool_calls?.map(
+					(toolCall) =>
+						new ToolMessage({
+							content:
+								"Tool call rejected by user. The user did not approve this action. Please ask the user what they would like you to do instead.",
+							tool_call_id: toolCall.id || "",
+						}),
+				) ?? [];
+			chatHistory.push(...rejectionMessages);
+		} else {
+			console.log("✅ Tool calls approved. Executing...\n");
+			const toolcallMessages = (
+				await Promise.allSettled(
+					lastMessage.tool_calls?.map(async (toolCall) => {
+						console.log(
+							`#toolcall: ${toolCall.name} ${JSON.stringify(toolCall.args)}`,
+						);
+						const tool = toolsMap.get(toolCall.name);
+						return tool ? await (tool.invoke as any)(toolCall) : undefined;
+					}) ?? [],
+				)
+			).map((r) => (r.status === "fulfilled" ? r.value : r.reason));
+			chatHistory.push(...toolcallMessages);
+		}
+
 		const response = await model.stream(chatHistory, { tools });
 		const accumulated = await streamAndAccumulateChunks(response);
 		chatHistory.push(accumulated);
