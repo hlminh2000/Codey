@@ -1,6 +1,6 @@
 // biome-ignore assist/source/organizeImports: dotenv needs imported first
 import "dotenv/config";
-// import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 // import { ChatOpenAI } from "@langchain/openai";
 import { ChatOllama } from "@langchain/ollama";
 import {
@@ -223,7 +223,8 @@ while (true) {
 		const hasSensitiveTools = sensitiveToolCalls.length > 0;
 
 		// Display tool calls
-		console.log("\n📋 Tool calls requested:");
+		console.log("===========");
+		console.log("📋 Tool calls requested:");
 		for (const toolCall of lastMessage.tool_calls || []) {
 			const isSensitive = SENSITIVE_TOOLS.has(toolCall.name);
 			const prefix = isSensitive ? "🔒" : "  ";
@@ -278,6 +279,7 @@ while (true) {
 							? await (tool.invoke as any)(toolCall)
 							: undefined;
 						console.log(`#result: ${JSON.stringify(result.content)}`);
+						console.log("===========")
 						return result;
 					}) ?? [],
 				)
