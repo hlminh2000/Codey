@@ -168,7 +168,6 @@ Here is the conversation so far:
 ${conversation}
 --- END
 `;
-	console.log("systemPrompt: ", systemPrompt);
 	const stream = await model.stream([
 		new SystemMessage(systemPrompt),
 		new HumanMessage(
