@@ -30,13 +30,13 @@ export const createTools = (
 		async ({ operation, a, b }) => {
 			switch (operation) {
 				case "add":
-					return `${a + b}`;
+					return `${a} + ${b} = ${a + b}`;
 				case "subtract":
-					return `${a - b}`;
+					return `${a} - ${b} = ${a - b}`;
 				case "multiply":
-					return `${a * b}`;
+					return `${a} * ${b} = ${a * b}`;
 				case "divide":
-					return `${a / b}`;
+					return `${a} / ${b} = ${a / b}`;
 				default:
 					return "Unknown operation";
 			}
