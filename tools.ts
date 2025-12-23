@@ -54,48 +54,48 @@ export const createTools = (
 			}),
 		},
 	),
-	tool(
-		async ({ type, message }) => {
-			// Call inquirer directly for a one-question prompt
-			const response = await inquirer.prompt([
-				{
-					type,
-					name: "userInput",
-					message,
-				},
-			]);
-			if (type === "confirm") return response.userInput ? "yes" : "no";
-			return response.userInput;
-		},
-		{
-			name: "promptTool",
-			description: `Use this tool when you want to ask user a question / get their inputs.
-here are the types:
-- input: used for free text questions
-- confirm: yes/no questions, returns a boolean
-`,
-			schema: z.object({
-				type: z
-					.enum([
-						"input",
-						"confirm",
-						"editor",
-						"password",
-						"number",
-						"rawlist",
-						"expand",
-						"checkbox",
-						"search",
-						"select",
-						"list",
-					])
-					.describe("The type of prompt to use."),
-				message: z
-					.string()
-					.describe("The question / message you want to present to the user."),
-			}),
-		},
-	),
+// 	tool(
+// 		async ({ type, message }) => {
+// 			// Call inquirer directly for a one-question prompt
+// 			const response = await inquirer.prompt([
+// 				{
+// 					type,
+// 					name: "userInput",
+// 					message,
+// 				},
+// 			]);
+// 			if (type === "confirm") return response.userInput ? "yes" : "no";
+// 			return response.userInput;
+// 		},
+// 		{
+// 			name: "promptTool",
+// 			description: `Use this tool when you want to ask user a question / get their inputs.
+// here are the types:
+// - input: used for free text questions
+// - confirm: yes/no questions, returns a boolean
+// `,
+// 			schema: z.object({
+// 				type: z
+// 					.enum([
+// 						"input",
+// 						"confirm",
+// 						"editor",
+// 						"password",
+// 						"number",
+// 						"rawlist",
+// 						"expand",
+// 						"checkbox",
+// 						"search",
+// 						"select",
+// 						"list",
+// 					])
+// 					.describe("The type of prompt to use."),
+// 				message: z
+// 					.string()
+// 					.describe("The question / message you want to present to the user."),
+// 			}),
+// 		},
+// 	),
 	tool(
 		async ({ path }) => {
 			try {
@@ -166,66 +166,66 @@ here are the types:
 			}),
 		},
 	),
-	tool(
-		async ({ request }) => {
-			if (!model) {
-				return "Error: Model not available for planning";
-			}
+	// tool(
+	// 	async ({ request }) => {
+	// 		if (!model) {
+	// 			return "Error: Model not available for planning";
+	// 		}
 			
-			try {
-				// Define the schema for the plan output
-				const planSchema = z.object({
-					steps: z.array(
-						z.object({
-							stepNumber: z.number().describe("The step number in the sequence"),
-							description: z.string().describe("A clear description of what needs to be done in this step"),
-							expectedOutcome: z.string().describe("What should be achieved after completing this step"),
-						})
-					).describe("An ordered list of steps to complete the task"),
-					estimatedComplexity: z.enum(["low", "medium", "high"]).describe("The estimated complexity of the overall task"),
-				});
+	// 		try {
+	// 			// Define the schema for the plan output
+	// 			const planSchema = z.object({
+	// 				steps: z.array(
+	// 					z.object({
+	// 						stepNumber: z.number().describe("The step number in the sequence"),
+	// 						description: z.string().describe("A clear description of what needs to be done in this step"),
+	// 						expectedOutcome: z.string().describe("What should be achieved after completing this step"),
+	// 					})
+	// 				).describe("An ordered list of steps to complete the task"),
+	// 				estimatedComplexity: z.enum(["low", "medium", "high"]).describe("The estimated complexity of the overall task"),
+	// 			});
 				
-				type PlanResponse = z.infer<typeof planSchema>;
+	// 			type PlanResponse = z.infer<typeof planSchema>;
 				
-				// Use structured output to generate the plan
-				const structuredModel = model.withStructuredOutput(planSchema);
+	// 			// Use structured output to generate the plan
+	// 			const structuredModel = model.withStructuredOutput(planSchema);
 				
-				const response: PlanResponse = await structuredModel.invoke([
-					{
-						role: "system",
-						content: "You are a helpful planning assistant. Break down user requests into clear, actionable steps. Be specific and thorough.",
-					},
-					{
-						role: "user",
-						content: `Please create a detailed step-by-step plan for the following request:\n\n${request}`,
-					},
-				]);
+	// 			const response: PlanResponse = await structuredModel.invoke([
+	// 				{
+	// 					role: "system",
+	// 					content: "You are a helpful planning assistant. Break down user requests into clear, actionable steps. Be specific and thorough.",
+	// 				},
+	// 				{
+	// 					role: "user",
+	// 					content: `Please create a detailed step-by-step plan for the following request:\n\n${request}`,
+	// 				},
+	// 			]);
 				
-				// Format the response as a readable string
-				const formattedPlan = [
-					`📋 Plan for: "${request}"`,
-					`Complexity: ${response.estimatedComplexity.toUpperCase()}`,
-					"",
-					"Steps:",
-					...response.steps.map(
-						(step: { stepNumber: number; description: string; expectedOutcome: string }) =>
-							`${step.stepNumber}. ${step.description}\n   Expected outcome: ${step.expectedOutcome}`
-					),
-				].join("\n");
+	// 			// Format the response as a readable string
+	// 			const formattedPlan = [
+	// 				`📋 Plan for: "${request}"`,
+	// 				`Complexity: ${response.estimatedComplexity.toUpperCase()}`,
+	// 				"",
+	// 				"Steps:",
+	// 				...response.steps.map(
+	// 					(step: { stepNumber: number; description: string; expectedOutcome: string }) =>
+	// 						`${step.stepNumber}. ${step.description}\n   Expected outcome: ${step.expectedOutcome}`
+	// 				),
+	// 			].join("\n");
 				
-				return formattedPlan;
-			} catch (error) {
-				return `Error generating plan: ${error instanceof Error ? error.message : String(error)}`;
-			}
-		},
-		{
-			name: "plan",
-			description: "Generates a detailed step-by-step plan for completing a task. Use this tool when you need to break down a complex request into actionable steps before executing them.",
-			schema: z.object({
-				request: z.string().describe("The task or request that needs to be planned out"),
-			}),
-		},
-	),
+	// 			return formattedPlan;
+	// 		} catch (error) {
+	// 			return `Error generating plan: ${error instanceof Error ? error.message : String(error)}`;
+	// 		}
+	// 	},
+	// 	{
+	// 		name: "plan",
+	// 		description: "Generates a detailed step-by-step plan for completing a task. Use this tool when you need to break down a complex request into actionable steps before executing them.",
+	// 		schema: z.object({
+	// 			request: z.string().describe("The task or request that needs to be planned out"),
+	// 		}),
+	// 	},
+	// ),
 	tool(
 		async ({ command }) => {
 			try {
