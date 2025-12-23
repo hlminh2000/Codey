@@ -1,0 +1,21 @@
+name: Build and Upload
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      PATH: "$HOME/.bun/bin:$PATH"
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+      - name: Install dependencies
+        run: bun install
+      - name: Build project
+        run: bun build --compile index.ts
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-output
+          path: index
