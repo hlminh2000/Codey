@@ -4,7 +4,7 @@ import "dotenv/config";
 // import { ChatOpenAI } from "@langchain/openai";
 import { ChatOllama } from "@langchain/ollama";
 import {
-	type AIMessage,
+	AIMessage,
 	SystemMessage,
 	HumanMessage,
 	ToolMessage,
@@ -34,6 +34,7 @@ console.log("Agent can only access files within this directory.\n");
 const model = new ChatOllama({
 	model: "qwen3:8b",
 	temperature: 0,
+	think: false,
 });
 
 // Create tools with the specified working directory and model
@@ -41,6 +42,7 @@ const tools = createTools(workingDirectory, model);
 
 const streamAndAccumulateChunks = async (
 	stream: Awaited<ReturnType<typeof model.stream>>,
+	showThoughts = false,
 ) => {
 	const chunks = [];
 	enum StreamType {
@@ -57,18 +59,24 @@ const streamAndAccumulateChunks = async (
 		streamState.currentStreamType = type;
 	};
 	for await (const chunk of stream) {
-		if (streamState.currentStreamType !== streamState.lastStreamType) {
+		if (
+			streamState.currentStreamType !== streamState.lastStreamType &&
+			showThoughts
+		) {
 			if (streamState.currentStreamType === StreamType.thought)
 				console.log("\n### THOUGHT ###\n");
 		}
 		if (chunk.content?.length) setCurrentStreamType(StreamType.response);
 		if (chunk.additional_kwargs.reasoning_content)
 			setCurrentStreamType(StreamType.thought);
-		if (chunk.additional_kwargs.reasoning_content) {
+		if (chunk.additional_kwargs.reasoning_content && showThoughts) {
 			process.stdout.write(String(chunk.additional_kwargs.reasoning_content));
 		}
 
-		if (streamState.currentStreamType !== streamState.lastStreamType) {
+		if (
+			streamState.currentStreamType !== streamState.lastStreamType &&
+			showThoughts
+		) {
 			if (streamState.currentStreamType === StreamType.response)
 				console.log("\n###############\n");
 		}
@@ -96,7 +104,7 @@ const streamAndAccumulateChunks = async (
 
 const chatHistory: BaseMessageLike[] = [
 	new SystemMessage(
-`You are a skilled coding assistant capable of:
+		`You are a skilled coding assistant capable of:
 1. Analyzing entire codebases by studying file structures and code patterns
 2. Performing precise code modifications using file system operations
 3. Maintaining code quality through best practices and documentation
@@ -122,7 +130,9 @@ Always:
 - Ask for confirmation when making significant changes
 - Provide clear explanations of your modifications
 
-You are currently working on the code base at ${workingDirectory}.`,
+You are currently working on the code base at ${workingDirectory}.
+When given a result of think tool, follow its instruction closely, using other tools at each step specified.
+`,
 	),
 ];
 
@@ -135,6 +145,42 @@ const SENSITIVE_TOOLS = new Set([
 	// Add more sensitive tools here as needed
 ]);
 
+const generateThoughts = async ({
+	userPrompt,
+	chatHistory,
+}: {
+	userPrompt: string;
+	chatHistory: BaseMessageLike[];
+}) => {
+	const conversation = chatHistory
+		.slice(0, chatHistory.length - 1)
+		.map((message) => {
+			const role = message.type  === "tool" ? `${message.type} (${message.name})` : message.type;
+			return `${role} >>>>: ${(message as any).content}`;
+		})
+		.join("\n");
+	const systemPrompt = `You are a thought generator for an agent. Given the user's prompt, respond with your thought about how to resolve the user's request. 
+You have access to the following tools: ${JSON.stringify(tools.map((tool) => ({ name: tool.name, description: tool.description, input: tool.schema.toJSONSchema() })))}.
+Respond by providing a step-by-step guide on how to perform the task, explicitly stating any tool that should be used at each step. DO NOT give your final solution, focus on how to get there only.
+
+Here is the conversation so far:
+--- START
+${conversation}
+--- END
+`;
+	console.log("systemPrompt: ", systemPrompt);
+	const stream = await model.stream([
+		new SystemMessage(systemPrompt),
+		new HumanMessage(
+			`The user said: "${userPrompt}". How should we approach this?`,
+		),
+	]);
+	console.log("🧠🧠🧠 Thoughts 🧠🧠🧠");
+	const thoughtMessage = await streamAndAccumulateChunks(stream);
+	console.log("🧠🧠🧠🧠🧠🧠🧠🧠🧠🧠🧠🧠");
+	return `Bellow are an expert's thoughts about how to perform this task. Follow instruction one step at a time: \n${thoughtMessage.content}`;
+};
+
 while (true) {
 	const { userPrompt } = await inquirer.prompt([
 		{
@@ -144,6 +190,25 @@ while (true) {
 		},
 	]);
 	chatHistory.push(new HumanMessage(userPrompt));
+	const thinkingToolId = crypto.randomUUID();
+	chatHistory.push(
+		...[
+			new AIMessage({
+				tool_calls: [
+					{
+						id: thinkingToolId,
+						name: "think",
+						args: { userPrompt },
+						type: "tool_call",
+					},
+				],
+			}),
+			new ToolMessage({
+				tool_call_id: thinkingToolId,
+				content: await generateThoughts({ userPrompt, chatHistory }),
+			}),
+		],
+	);
 	const response = await model.stream(chatHistory, { tools });
 	const accumulated = await streamAndAccumulateChunks(response);
 	chatHistory.push(accumulated);
@@ -151,10 +216,11 @@ while (true) {
 		const lastMessage = chatHistory.at(-1) as AIMessage;
 
 		// Check if any of the tool calls are sensitive
-		const sensitiveToolCalls = lastMessage.tool_calls?.filter((toolCall) =>
-			SENSITIVE_TOOLS.has(toolCall.name)
-		) ?? [];
-		
+		const sensitiveToolCalls =
+			lastMessage.tool_calls?.filter((toolCall) =>
+				SENSITIVE_TOOLS.has(toolCall.name),
+			) ?? [];
+
 		const hasSensitiveTools = sensitiveToolCalls.length > 0;
 
 		// Display tool calls
@@ -162,20 +228,24 @@ while (true) {
 		for (const toolCall of lastMessage.tool_calls || []) {
 			const isSensitive = SENSITIVE_TOOLS.has(toolCall.name);
 			const prefix = isSensitive ? "🔒" : "  ";
-			console.log(`${prefix} - ${toolCall.name}(${JSON.stringify(toolCall.args)})`);
+			console.log(
+				`${prefix} - ${toolCall.name}(${JSON.stringify(toolCall.args)})`,
+			);
 		}
 
 		// Only ask for approval if there are sensitive tools
 		const approved = await (async () => {
 			if (hasSensitiveTools) {
-				return (await inquirer.prompt([
-					{
-						type: "confirm",
-						name: "approved",
-						message: `Do you approve these ${sensitiveToolCalls.length} sensitive tool call(s)?`,
-						default: true,
-					},
-				])).approved;
+				return (
+					await inquirer.prompt([
+						{
+							type: "confirm",
+							name: "approved",
+							message: `Do you approve these ${sensitiveToolCalls.length} sensitive tool call(s)?`,
+							default: true,
+						},
+					])
+				).approved;
 			}
 			console.log("✅ Auto-approved (no sensitive tools). Executing...\n");
 			return true;
@@ -208,7 +278,7 @@ while (true) {
 						const result = tool
 							? await (tool.invoke as any)(toolCall)
 							: undefined;
-						console.log(`#result: ${JSON.stringify(result.content)}`)
+						console.log(`#result: ${JSON.stringify(result.content)}`);
 						return result;
 					}) ?? [],
 				)
